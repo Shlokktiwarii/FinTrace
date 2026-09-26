@@ -1,12 +1,13 @@
 import httpx
 import pytest
 
-from fintrace.ingestion.fetcher import FetchError, HttpFetcher
+from fintrace.ingestion.fetcher import AsyncHttpFetcher, FetchError
 
 
-def test_fetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    def mock_get(
-        self: httpx.Client,
+@pytest.mark.asyncio
+async def test_fetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def mock_get(
+        self: httpx.AsyncClient,
         url: str,
     ) -> httpx.Response:
         return httpx.Response(
@@ -15,18 +16,19 @@ def test_fetch_success(monkeypatch: pytest.MonkeyPatch) -> None:
             request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr(httpx.Client, "get", mock_get)
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
 
-    fetcher = HttpFetcher()
+    fetcher = AsyncHttpFetcher()
 
-    result = fetcher.fetch("https://example.com/report.pdf")
+    result = await fetcher.fetch("https://example.com/report.pdf")
 
     assert result == b"financial document"
 
 
-def test_fetch_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def mock_get(
-        self: httpx.Client,
+@pytest.mark.asyncio
+async def test_fetch_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def mock_get(
+        self: httpx.AsyncClient,
         url: str,
     ) -> httpx.Response:
         return httpx.Response(
@@ -34,9 +36,44 @@ def test_fetch_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
             request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr(httpx.Client, "get", mock_get)
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
 
-    fetcher = HttpFetcher(max_retries=3)
+    fetcher = AsyncHttpFetcher(max_retries=3)
 
     with pytest.raises(FetchError):
-        fetcher.fetch("https://example.com/missing.pdf")
+        await fetcher.fetch("https://example.com/missing.pdf")
+
+
+@pytest.mark.asyncio
+async def test_fetch_retries_retryable_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    async def mock_get(
+        self: httpx.AsyncClient,
+        url: str,
+    ) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+
+        if calls < 3:
+            return httpx.Response(
+                status_code=503,
+                request=httpx.Request("GET", url),
+            )
+
+        return httpx.Response(
+            status_code=200,
+            content=b"financial document",
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+
+    fetcher = AsyncHttpFetcher(max_retries=3)
+
+    result = await fetcher.fetch("https://example.com/report.pdf")
+
+    assert result == b"financial document"
+    assert calls == 3

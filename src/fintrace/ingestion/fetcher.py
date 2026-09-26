@@ -10,8 +10,8 @@ class FetchError(Exception):
     """Raised when a document cannot be fetched."""
 
 
-class HttpFetcher:
-    """Fetch raw document bytes from an HTTP URL."""
+class AsyncHttpFetcher:
+    """Fetch raw document bytes asynchronously."""
 
     def __init__(
         self,
@@ -21,18 +21,18 @@ class HttpFetcher:
         self.timeout = timeout
         self.max_retries = max_retries
 
-    def fetch(self, url: str) -> bytes:
-        """Fetch and return the raw response bytes."""
+    async def fetch(self, url: str) -> bytes:
+        """Fetch and return raw response bytes."""
 
         last_error: Exception | None = None
 
-        with httpx.Client(
+        async with httpx.AsyncClient(
             timeout=self.timeout,
             follow_redirects=True,
         ) as client:
             for attempt in range(self.max_retries + 1):
                 try:
-                    response = client.get(url)
+                    response = await client.get(url)
 
                     if response.status_code in RETRYABLE_STATUS_CODES:
                         if attempt < self.max_retries:
