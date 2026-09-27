@@ -33,3 +33,11 @@ class RawDocument:
     source_url: str
     content: bytes
     fetched_at: datetime
+
+@dataclass(frozen=True)
+class DownloadResult:
+    """Result of attempting to download a document."""
+
+    url: str
+    content: bytes | None
+    error: str | None
