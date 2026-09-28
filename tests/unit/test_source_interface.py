@@ -1,11 +1,11 @@
 from collections.abc import Iterable
 
-from fintrace.ingestion.models import RawDocument
+from fintrace.ingestion.models import DiscoveredDocument
 from fintrace.ingestion.sources.base import DocumentSourceClient
 
 
 class FakeSource:
-    def fetch_documents(self) -> Iterable[RawDocument]:
+    def fetch_documents(self) -> Iterable[DiscoveredDocument]:
         return []
 
 

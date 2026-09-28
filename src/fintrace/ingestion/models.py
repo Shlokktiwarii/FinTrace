@@ -19,6 +19,17 @@ class DocumentType(StrEnum):
     CORPORATE_FILING = "corporate_filing"
     EARNINGS_PRESENTATION = "earnings_presentation"
 
+@dataclass(frozen=True)
+class DiscoveredDocument:
+    """Metadata for a financial document discovered from a source."""
+
+    document_id: str
+    company: str
+    ticker: str | None
+    exchange: str | None
+    document_type: DocumentType
+    source: DocumentSource
+    source_url: str
 
 @dataclass(frozen=True)
 class RawDocument:

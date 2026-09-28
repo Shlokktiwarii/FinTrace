@@ -1,12 +1,12 @@
 from collections.abc import Iterable
 from typing import Protocol
 
-from fintrace.ingestion.models import RawDocument
+from fintrace.ingestion.models import DiscoveredDocument
 
 
 class DocumentSourceClient(Protocol):
     """Interface implemented by financial document source connectors."""
 
-    def fetch_documents(self) -> Iterable[RawDocument]:
-        """Fetch documents from the external source."""
+    def discovered_documents(self) -> Iterable[DiscoveredDocument]:
+        """Discover documents available from the source."""
         ...
