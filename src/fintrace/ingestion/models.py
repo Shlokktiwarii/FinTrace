@@ -52,3 +52,4 @@ class DownloadResult:
     url: str
     content: bytes | None
     error: str | None
+    fetched_at: datetime

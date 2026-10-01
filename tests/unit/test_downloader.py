@@ -3,6 +3,7 @@ import pytest
 from fintrace.ingestion.downloader import AsyncDocumentDownloader
 from fintrace.ingestion.models import DownloadResult
 from fintrace.ingestion.fetcher import FetchError
+from datetime import datetime, timezone
 
 
 class FakeFetcher:
@@ -88,6 +89,7 @@ def test_download_result_success() -> None:
         url="https://example.com/report.pdf",
         content=b"financial document",
         error=None,
+        fetched_at=datetime.now(timezone.utc),
     )
 
     assert result.url == "https://example.com/report.pdf"
@@ -100,6 +102,7 @@ def test_download_result_failure() -> None:
         url="https://example.com/report.pdf",
         content=None,
         error="download failed",
+        fetched_at=datetime.now(timezone.utc),
     )
 
     assert result.url == "https://example.com/report.pdf"

@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Iterable
-
+from datetime import datetime, timezone
 from fintrace.ingestion.fetcher import AsyncHttpFetcher , FetchError
 from fintrace.ingestion.models import DownloadResult
 
@@ -36,6 +36,7 @@ class AsyncDocumentDownloader:
                         url=url,
                         content=content,
                         error=None,
+                        fetched_at=datetime.now(timezone.utc),
                     )
 
                 except FetchError as exc:
@@ -43,6 +44,7 @@ class AsyncDocumentDownloader:
                         url=url,
                         content=None,
                         error=str(exc),
+                        fetched_at=datetime.now(timezone.utc),
                     )
 
         return await asyncio.gather(
