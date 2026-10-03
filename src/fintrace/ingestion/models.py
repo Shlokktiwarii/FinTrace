@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-
 class DocumentSource(StrEnum):
     """Origin of a financial document."""
 
@@ -53,3 +52,20 @@ class DownloadResult:
     content: bytes | None
     error: str | None
     fetched_at: datetime
+
+@dataclass(frozen=True)
+class DocumentPage:
+    """Text extracted from a single document page."""
+
+    page_number: int
+    text: str
+
+
+@dataclass(frozen=True)
+class ParsedDocument:
+    """Structured text extracted from a raw document."""
+
+    document_id: str
+    company: str
+    source_url: str
+    pages: tuple[DocumentPage, ...]
