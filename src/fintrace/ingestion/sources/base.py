@@ -7,6 +7,8 @@ from fintrace.ingestion.models import DiscoveredDocument
 class DocumentSourceClient(Protocol):
     """Interface implemented by financial document source connectors."""
 
-    def discovered_documents(self) -> Iterable[DiscoveredDocument]:
-        """Discover documents available from the source."""
+    async def discover_documents(
+        self,
+    ) -> Iterable[DiscoveredDocument]:
+        """Discover financial documents available from the source."""
         ...

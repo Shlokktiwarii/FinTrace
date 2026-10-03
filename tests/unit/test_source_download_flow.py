@@ -11,7 +11,7 @@ from fintrace.ingestion.sources.base import DocumentSourceClient
 
 
 class FakeSource:
-    def discover_documents(self) -> list[DiscoveredDocument]:
+    async def discover_documents(self) -> list[DiscoveredDocument]:
         return [
             DiscoveredDocument(
                 document_id="reliance-2026-ar",
@@ -44,7 +44,7 @@ async def test_source_discovery_to_download() -> None:
     source: DocumentSourceClient = FakeSource()
     fetcher = FakeFetcher()
 
-    documents = list(source.discover_documents())
+    documents = list(await source.discover_documents())
 
     downloader = AsyncDocumentDownloader(
         fetcher=fetcher,

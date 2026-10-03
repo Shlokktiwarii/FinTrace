@@ -11,7 +11,7 @@ from fintrace.ingestion.pipeline import IngestionPipeline
 
 
 class FakeSource:
-    def discover_documents(self) -> list[DiscoveredDocument]:
+    async def discover_documents(self) -> list[DiscoveredDocument]:
         return [
             DiscoveredDocument(
                 document_id="reliance-2026-ar",

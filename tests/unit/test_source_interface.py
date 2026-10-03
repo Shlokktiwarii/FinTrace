@@ -1,17 +1,18 @@
-from collections.abc import Iterable
+import pytest
 
 from fintrace.ingestion.models import DiscoveredDocument
 from fintrace.ingestion.sources.base import DocumentSourceClient
 
 
 class FakeSource:
-    def fetch_documents(self) -> Iterable[DiscoveredDocument]:
+    async def discover_documents(self) -> list[DiscoveredDocument]:
         return []
 
 
-def test_source_client_contract() -> None:
+@pytest.mark.asyncio
+async def test_source_client_contract() -> None:
     source: DocumentSourceClient = FakeSource()
 
-    documents = source.fetch_documents()
+    documents = await source.discover_documents()
 
     assert list(documents) == []

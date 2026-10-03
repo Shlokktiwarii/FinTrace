@@ -1,30 +1,43 @@
-from fintrace.ingestion.models import (
-    DiscoveredDocument,
-    DocumentSource,
-    DocumentType,
-)
+import pytest
+
 from fintrace.ingestion.sources.company_reports import CompanyReportSource
+from fintrace.ingestion.sources.parsers.report_links import ReportLinkParser
 
 
-def test_company_report_source_discovers_reports() -> None:
-    report = DiscoveredDocument(
-        document_id="reliance-2026-ar",
-        company="Reliance Industries Limited",
-        ticker="RELIANCE",
-        exchange="NSE",
-        document_type=DocumentType.ANNUAL_REPORT,
-        source=DocumentSource.COMPANY,
-        source_url="https://example.com/reliance-2026.pdf",
-    )
+class FakeFetcher:
+    async def fetch(self, url: str) -> bytes:
+        return b"""
+        <html>
+            <body>
+                <a href="/reports/annual-2026.pdf">
+                    Annual Report 2026
+                </a>
+                <a href="/reports/results-2026.pdf">
+                    Financial Results 2026
+                </a>
+            </body>
+        </html>
+        """
 
+
+@pytest.mark.asyncio
+async def test_company_report_source_discovers_documents() -> None:
     source = CompanyReportSource(
         company="Reliance Industries Limited",
         ticker="RELIANCE",
         exchange="NSE",
-        reports=[report],
+        reports_url="https://example.com/investor/",
+        fetcher=FakeFetcher(),
+        parser=ReportLinkParser(),
     )
 
-    documents = list(source.discover_documents())
+    documents = list(await source.discover_documents())
 
-    assert len(documents) == 1
-    assert documents[0] == report
+    assert len(documents) == 2
+
+    assert documents[0].ticker == "RELIANCE"
+    assert documents[0].exchange == "NSE"
+
+    assert documents[0].source_url == (
+        "https://example.com/reports/annual-2026.pdf"
+    )

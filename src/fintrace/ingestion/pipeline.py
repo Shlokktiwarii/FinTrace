@@ -26,7 +26,7 @@ class IngestionPipeline:
         """Run the ingestion pipeline."""
 
         documents: Iterable[DiscoveredDocument] = (
-            self.source.discover_documents()
+            await self.source.discover_documents()
         )
 
         documents = list(documents)
