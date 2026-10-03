@@ -69,3 +69,33 @@ class ParsedDocument:
     company: str
     source_url: str
     pages: tuple[DocumentPage, ...]
+
+@dataclass(frozen=True)
+class NormalizedPage:
+    """Cleaned text from a document page."""
+
+    page_number: int
+    text: str
+
+
+@dataclass(frozen=True)
+class NormalizedDocument:
+    """Normalized financial document."""
+
+    document_id: str
+    company: str
+    source_url: str
+    pages: tuple[NormalizedPage, ...]
+
+
+@dataclass(frozen=True)
+class DocumentChunk:
+    """A retrieval-ready chunk with source lineage."""
+
+    chunk_id: str
+    document_id: str
+    company: str
+    source_url: str
+    page_number: int
+    section: str | None
+    text: str
