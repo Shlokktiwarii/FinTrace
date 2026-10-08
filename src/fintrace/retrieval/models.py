@@ -9,3 +9,10 @@ class IndexedChunk:
 
     chunk: DocumentChunk
     embedding: tuple[float, ...]
+
+@dataclass(frozen=True)
+class SearchResult:
+    """A chunk returned by retrieval."""
+
+    chunk: DocumentChunk
+    score: float
