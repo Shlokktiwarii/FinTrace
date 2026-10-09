@@ -33,3 +33,13 @@ class DenseRetrievalService:
             query_embedding=query_embedding,
             limit=limit,
         )
+
+        query_embedding = self._embedding_provider.embed(query)
+
+        if len(query_embedding) != self._embedding_provider.dimension:
+            raise ValueError("Query embedding has an unexpected dimension")
+
+        return self._vector_store.search(
+            query_embedding=query_embedding,
+            limit=limit,
+            )

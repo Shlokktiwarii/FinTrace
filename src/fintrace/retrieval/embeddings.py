@@ -2,8 +2,14 @@ from typing import Protocol
 
 
 class EmbeddingProvider(Protocol):
-    """Interface for generating text embeddings."""
+    """Interface for text embedding providers."""
+
+    @property
+    def dimension(self) -> int:
+        ...
 
     def embed(self, text: str) -> list[float]:
-        """Generate an embedding for text."""
+        ...
+
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
         ...

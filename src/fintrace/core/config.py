@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     source_request_timeout: int = 30
     source_max_retries: int = 3
 
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_dimension: int = 384
+    embedding_device: str = "cpu"
+    embedding_batch_size: int = 32
+    
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None
