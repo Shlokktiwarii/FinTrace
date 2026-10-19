@@ -1,50 +1,44 @@
 import os
-from pathlib import Path
 
+import pytest
 from dotenv import load_dotenv
 from google import genai
-from google.genai import types
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(PROJECT_ROOT / ".env", override=False)
+load_dotenv()
 
-api_key = os.getenv("FINTRACE_LLM_API_KEY")
-model = os.getenv("FINTRACE_LLM_MODEL")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.live,
+]
 
-if not api_key:
-    raise RuntimeError("FINTRACE_LLM_API_KEY was not loaded.")
 
-if not model:
-    raise RuntimeError("FINTRACE_LLM_MODEL was not loaded.")
+@pytest.mark.skipif(
+    os.getenv("RUN_GEMINI_LIVE_TESTS") != "1",
+    reason="Set RUN_GEMINI_LIVE_TESTS=1 to run live Gemini tests.",
+)
+def test_gemini_native_connection():
+    """Verify that the configured Gemini model can generate a response."""
+    api_key = os.getenv("FINTRACE_LLM_API_KEY")
+    model = os.getenv("FINTRACE_LLM_MODEL")
 
-client = genai.Client(api_key=api_key)
+    if not api_key:
+        pytest.fail(
+            "FINTRACE_LLM_API_KEY is missing. "
+            "Check that the project-root .env file defines it."
+        )
 
-try:
-    print(f"Testing native Gemini generation with: {model}")
+    if not model:
+        pytest.fail(
+            "FINTRACE_LLM_MODEL is missing. "
+            "Check that the project-root .env file defines it."
+        )
+
+    client = genai.Client(api_key=api_key)
 
     response = client.models.generate_content(
         model=model,
         contents="Reply with exactly: FINTRACE_GEMINI_OK",
-        config=types.GenerateContentConfig(
-            temperature=0,
-            max_output_tokens=128,
-        ),
     )
 
-    print("\n--- Response diagnostics ---")
-    print("Response text:", repr(response.text))
-    print("Prompt feedback:", response.prompt_feedback)
-
-    if response.candidates:
-        for index, candidate in enumerate(response.candidates):
-            print(f"\nCandidate {index}:")
-            print("Finish reason:", candidate.finish_reason)
-            print("Content:", candidate.content)
-    else:
-        print("No candidates returned.")
-
-    if response.usage_metadata:
-        print("Usage metadata:", response.usage_metadata)
-
-finally:
-    client.close()
+    assert response.text, "Gemini returned an empty response."
+    assert "FINTRACE_GEMINI_OK" in response.text

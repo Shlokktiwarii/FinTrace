@@ -24,6 +24,7 @@ dependencies = [
     "google-genai>=2.31.0",
 ]
 
+
 [dependency-groups]
 dev = [
     "pytest",
@@ -43,6 +44,10 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: tests that exercise multiple components together",
+    "live: tests that require live external services or APIs",
+]
 
 [tool.mypy]
 python_version = "3.12"
