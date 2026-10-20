@@ -45,19 +45,20 @@ def validate_numeric_consistency(
     evidence: Sequence[Evidence],
     *,
     tolerance_percentage_points: Decimal = Decimal("1.0"),
-) -> VerificationCheck:
-    """Validate recognizable percentage-change claims.
-
-    Checks:
-    1. Whether the percentage agrees with the old and new values.
-    2. Whether the stated direction agrees with the values.
-    3. Whether the values occur in the supplied evidence.
-
-    This is a limited deterministic check, not a complete financial
-    fact checker or semantic entailment model.
-    """
+    ) -> VerificationCheck:
+    """Validate recognizable percentage-change claims."""
 
     matches = list(CHANGE_PATTERN.finditer(answer.answer))
+
+    if answer.abstained:
+        return VerificationCheck(
+            name="numeric_consistency",
+            status=VerificationStatus.NOT_CHECKED,
+            message=(
+                "Numeric consistency was not checked "
+                "because the answer abstained."
+            ),
+        )
 
     if not matches:
         return VerificationCheck(
@@ -68,7 +69,6 @@ def validate_numeric_consistency(
                 "Numerical claims were not comprehensively checked."
             ),
         )
-
     evidence_text = "\n".join(
         item.text for item in evidence
     ).casefold()
