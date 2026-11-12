@@ -18,7 +18,7 @@ class SentenceTransformerEmbeddingProvider:
             device=device,
         )
         self._batch_size = batch_size
-        self._dimension = self._model.get_sentence_embedding_dimension()
+        self._dimension = self._model.get_embedding_dimension()
 
         if self._dimension is None:
             raise ValueError("Embedding model has no known output dimension")

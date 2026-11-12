@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from fintrace.retrieval.models import IndexedChunk
+from fintrace.retrieval.models import IndexedChunk , SearchResult
 
 
 class VectorStore(Protocol):
@@ -14,6 +14,6 @@ class VectorStore(Protocol):
         self,
         query_embedding: list[float],
         limit: int = 5,
-    ) -> list[IndexedChunk]:
+    ) -> list[SearchResult]:
         """Return the most similar chunks."""
         ...

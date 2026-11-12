@@ -14,11 +14,22 @@ class Settings(BaseSettings):
     source_request_timeout: int = 30
     source_max_retries: int = 3
 
+    # Embeddings
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimension: int = 384
     embedding_device: str = "cpu"
     embedding_batch_size: int = 32
-    
+
+    # LLM
+    llm_provider: str = "openrouter"
+    llm_model: str = "openrouter/free"
+    llm_api_key: str | None = None
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+
+    llm_timeout: float = 60.0
+    llm_temperature: float = 0.0
+    llm_max_tokens: int = 4096
+
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str | None = None

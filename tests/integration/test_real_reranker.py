@@ -59,18 +59,20 @@ def test_real_cross_encoder_ranks_relevant_financial_passage_first():
             score=0.70,
         ),
     ]
+    print("\n[1] Initializing reranker...")
 
     reranker = CrossEncoderReranker(
         model_name="BAAI/bge-reranker-base",
         device="cpu",
     )
+    print("[2] Reranker initialized. Starting inference...")
 
     results = reranker.rerank(
         query="What was revenue from operations in FY2025?",
         candidates=candidates,
         limit=3,
     )
-
+    print("[3] Reranking completed.")
     assert results
     assert results[0].chunk.chunk_id == "revenue"
     assert results[0].chunk.page_number == 10
