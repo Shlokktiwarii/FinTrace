@@ -53,3 +53,58 @@ export async function askFinTrace(
 
   return response.json();
 }
+export interface DocumentUploadResponse {
+  document_id: string;
+  filename: string;
+  company: string;
+  status: string;
+  chunks_indexed: number;
+  source_url: string;
+}
+
+export interface DocumentUploadInput {
+  file: File;
+  company: string;
+  ticker?: string;
+  exchange?: string;
+  document_type: string;
+}
+
+export async function uploadDocument(
+  input: DocumentUploadInput
+): Promise<DocumentUploadResponse> {
+  const formData = new FormData();
+
+  formData.append("file", input.file);
+  formData.append("company", input.company);
+  formData.append("ticker", input.ticker || "");
+  formData.append("exchange", input.exchange || "");
+  formData.append("document_type", input.document_type);
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/documents/upload`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    let message = responseText;
+
+    try {
+      const parsed = JSON.parse(responseText);
+      message = parsed.detail || parsed.message || responseText;
+    } catch {
+      // Response wasn't JSON; preserve the original error.
+    }
+
+    throw new Error(
+      `Upload failed (${response.status}): ${message.slice(0, 500)}`
+    );
+  }
+
+  return JSON.parse(responseText) as DocumentUploadResponse;
+}

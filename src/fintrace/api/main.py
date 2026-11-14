@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-
+from fintrace.api.routes.documents import router as documents_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fintrace.api.dependencies import initialize_services
@@ -52,6 +52,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+app.include_router(
+    documents_router,
+    prefix="/api/v1",
 )
 
 

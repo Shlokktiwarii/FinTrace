@@ -2,6 +2,12 @@ from fintrace.core.config import Settings
 from fintrace.generation.provider_factory import create_llm_provider
 from fintrace.generation.service import GenerationService
 from fintrace.ingestion.models import DocumentChunk
+from fintrace.ingestion.indexing_pipeline import DocumentIndexingPipeline
+from fintrace.ingestion.parsers.pdf import PdfParser
+from fintrace.ingestion.normalizer import DocumentNormalizer
+from fintrace.ingestion.structure import DocumentStructureExtractor
+from fintrace.ingestion.chunker import DocumentChunker
+
 from fintrace.retrieval.hybrid import HybridRetrievalService
 from fintrace.retrieval.qdrant_store import QdrantVectorStore
 from fintrace.retrieval.reranker import CrossEncoderReranker
@@ -12,6 +18,7 @@ from fintrace.retrieval.sentence_transformer import (
 from fintrace.retrieval.service import DenseRetrievalService
 from fintrace.retrieval.sparse import BM25SparseRetriever
 from fintrace.verification.service import VerificationService
+from fintrace.retrieval.indexer import ChunkIndexer
 
 
 def load_all_chunks(store: QdrantVectorStore) -> list[DocumentChunk]:
@@ -73,6 +80,16 @@ def initialize_services(settings: Settings) -> dict:
         vector_size=embedding_provider.dimension,
     )
 
+    # Initialize document indexing pipeline.
+    indexing_pipeline = DocumentIndexingPipeline(
+    parser=PdfParser(),
+    normalizer=DocumentNormalizer(),
+    structure_extractor=DocumentStructureExtractor(),
+    chunker=DocumentChunker(),
+    indexer=ChunkIndexer(embedding_provider),
+    vector_store=vector_store,
+)
+
     # 3. Load indexed chunks.
     chunks = load_all_chunks(vector_store)
 
@@ -122,6 +139,8 @@ def initialize_services(settings: Settings) -> dict:
         "embedding_provider": embedding_provider,
         "vector_store": vector_store,
         "chunks": chunks,
+        "sparse_retriever": sparse_retriever,
+        "indexing_pipeline": indexing_pipeline,
         "retrieval": retrieval_service,
         "generation": generation_service,
         "verification": verification_service,

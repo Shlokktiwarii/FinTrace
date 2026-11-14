@@ -28,6 +28,7 @@ dependencies = [
     "pikepdf>=10.18.0",
     "fonttools>=4.68.0",
     "pymupdf>=2.1",
+    "python-multipart>=0.0.33",
 ]
 
 
