@@ -17,10 +17,11 @@ class Settings(BaseSettings):
     # Supabase
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
+    supabase_storage_bucket: str = "financial-document"
 
     # PostgreSQL
     database_url: str | None = None
-    
+
     # Embeddings
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimension: int = 384

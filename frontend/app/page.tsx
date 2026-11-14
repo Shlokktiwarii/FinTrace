@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -19,15 +19,16 @@ import {
   FileUp,
   X,
   Database,
+  History,
+  FileCheck2,
+  ChevronRight,
 } from "lucide-react";
 
 import {
   askFinTrace,
   uploadDocument,
-  getDocuments,
   QueryResponse,
   DocumentUploadResponse,
-  StoredDocument,
 } from "@/lib/api";
 
 const suggestions = [
@@ -35,6 +36,8 @@ const suggestions = [
   "Compare Reliance's revenue in FY2024 and FY2025.",
   "What was the total income of Reliance Industries in FY2025?",
 ];
+
+type WorkspaceView = "research" | "verification";
 
 export default function Home() {
   const [question, setQuestion] = useState("");
@@ -45,6 +48,11 @@ export default function Home() {
   const [expandedCitation, setExpandedCitation] = useState<string | null>(
     null
   );
+
+  const [activeView, setActiveView] = useState<WorkspaceView>("research");
+  const [verificationHistory, setVerificationHistory] = useState<
+    QueryResponse[]
+  >([]);
 
   // Document upload state
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -60,48 +68,9 @@ export default function Home() {
   const [uploadResult, setUploadResult] =
     useState<DocumentUploadResponse | null>(null);
 
-  // Persistent document history
   const [uploadedDocuments, setUploadedDocuments] = useState<
-    StoredDocument[]
+    DocumentUploadResponse[]
   >([]);
-
-  const [documentsLoading, setDocumentsLoading] = useState(true);
-  const [documentsError, setDocumentsError] = useState("");
-
-  // Fetch document history when workspace loads
-  useEffect(() => {
-    async function fetchDocuments() {
-      try {
-        const documents = await getDocuments();
-        setUploadedDocuments(documents);
-        setDocumentsError("");
-      } catch (err) {
-        setDocumentsError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load documents."
-        );
-      } finally {
-        setDocumentsLoading(false);
-      }
-    }
-
-    fetchDocuments();
-  }, []);
-
-  async function refreshDocuments() {
-    try {
-      const documents = await getDocuments();
-      setUploadedDocuments(documents);
-      setDocumentsError("");
-    } catch (err) {
-      setDocumentsError(
-        err instanceof Error
-          ? err.message
-          : "Unable to refresh documents."
-      );
-    }
-  }
 
   async function handleSubmit(
     event: React.FormEvent<HTMLFormElement>
@@ -116,7 +85,11 @@ export default function Home() {
 
     try {
       const data = await askFinTrace(question.trim());
+
       setResult(data);
+
+      // Keep verification reports available during this session.
+      setVerificationHistory((previous) => [data, ...previous]);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Something went wrong."
@@ -148,8 +121,10 @@ export default function Home() {
 
       setUploadResult(response);
 
-      // Refresh persistent document history from PostgreSQL
-      await refreshDocuments();
+      setUploadedDocuments((previous) => [
+        response,
+        ...previous,
+      ]);
 
       setFile(null);
       setCompany("");
@@ -190,16 +165,22 @@ export default function Home() {
     }
   }
 
-  function documentStatusClass(status: string) {
-    switch (status) {
-      case "completed":
-        return "text-emerald-400";
-      case "failed":
-        return "text-red-400";
-      default:
-        return "text-amber-400";
-    }
+  function openResearchReport(report: QueryResponse) {
+    setResult(report);
+    setQuestion(report.question);
+    setError("");
+    setActiveView("research");
+    setExpandedCitation(null);
   }
+
+  const acceptedReports = verificationHistory.filter(
+    (report) => report.verification.decision.toLowerCase() === "accept"
+  ).length;
+
+  const flaggedReports = verificationHistory.filter((report) => {
+    const decision = report.verification.decision.toLowerCase();
+    return decision === "flag" || decision === "reject";
+  }).length;
 
   return (
     <main className="workspace">
@@ -221,6 +202,7 @@ export default function Home() {
             setResult(null);
             setQuestion("");
             setError("");
+            setActiveView("research");
           }}
         >
           <Sparkles size={17} />
@@ -230,12 +212,19 @@ export default function Home() {
         <div className="sidebar-section">
           <span className="sidebar-label">WORKSPACE</span>
 
-          <div className="nav-item active">
+          <button
+            type="button"
+            className={`nav-item ${
+              activeView === "research" ? "active" : ""
+            }`}
+            onClick={() => setActiveView("research")}
+          >
             <Search size={17} />
             Research
-          </div>
+          </button>
 
           <button
+            type="button"
             className="nav-item"
             onClick={() => setUploadOpen(true)}
           >
@@ -244,11 +233,19 @@ export default function Home() {
             <span className="nav-soon">Upload</span>
           </button>
 
-          <div className="nav-item">
+          <button
+            type="button"
+            className={`nav-item ${
+              activeView === "verification" ? "active" : ""
+            }`}
+            onClick={() => setActiveView("verification")}
+          >
             <ShieldCheck size={17} />
             Verification
-            <span className="nav-soon">Soon</span>
-          </div>
+            <span className="nav-soon">
+              {verificationHistory.length}
+            </span>
+          </button>
         </div>
 
         <div className="sidebar-bottom">
@@ -270,7 +267,8 @@ export default function Home() {
       <section className="main-content">
         <header className="topbar">
           <div className="breadcrumb">
-            Workspace <span>/</span> Research
+            Workspace <span>/</span>{" "}
+            {activeView === "research" ? "Research" : "Verification"}
           </div>
 
           <div className="topbar-right">
@@ -284,378 +282,610 @@ export default function Home() {
         </header>
 
         <div className="content-area">
-          <div className="heading">
-            <div className="eyebrow">
-              <Sparkles size={14} />
-              EVIDENCE-FIRST FINANCIAL RESEARCH
-            </div>
+          {activeView === "verification" ? (
+            /* VERIFICATION WORKSPACE */
+            <div className="space-y-7">
+              <div className="heading">
+                <div className="eyebrow">
+                  <ShieldCheck size={14} />
+                  EVIDENCE AND CLAIM VALIDATION
+                </div>
 
-            <h2>
-              Research with
-              <span> confidence.</span>
-            </h2>
-
-            <p>
-              Ask questions about financial filings. Get grounded answers
-              with traceable evidence and transparent verification.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setUploadOpen(true)}
-              className="mt-5 inline-flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-400 transition hover:bg-blue-500/20"
-            >
-              <Upload size={16} />
-              Upload financial report
-            </button>
-          </div>
-
-          {/* Persistent document history */}
-          <section className="mb-7 rounded-xl border border-white/10 bg-white/[0.02] p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Database size={17} className="text-blue-400" />
-                <h3 className="text-sm font-semibold">
-                  Recently uploaded
-                </h3>
-              </div>
-
-              <span className="text-xs text-slate-500">
-                {uploadedDocuments.length} documents
-              </span>
-            </div>
-
-            {documentsLoading ? (
-              <div className="flex items-center gap-2 py-5 text-sm text-slate-400">
-                <Loader2 size={16} className="animate-spin" />
-                Loading document history...
-              </div>
-            ) : documentsError ? (
-              <div className="flex items-center gap-2 py-4 text-sm text-red-400">
-                <CircleAlert size={16} />
-                {documentsError}
-              </div>
-            ) : uploadedDocuments.length === 0 ? (
-              <div className="py-6 text-center">
-                <FileText
-                  className="mx-auto mb-2 text-slate-500"
-                  size={25}
-                />
-                <p className="text-sm text-slate-400">
-                  No documents uploaded yet.
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Upload a financial report to get started.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {uploadedDocuments.map((document) => (
-                  <div
-                    key={document.document_id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-3"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <FileText
-                        size={19}
-                        className="shrink-0 text-blue-400"
-                      />
-
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-white">
-                          {document.company}
-                        </p>
-
-                        <p className="truncate text-xs text-slate-500">
-                          {document.filename}
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-600">
-                          {new Date(
-                            document.created_at
-                          ).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs text-slate-400">
-                        {document.chunks_indexed} chunks
-                      </span>
-
-                      <span
-                        className={`text-xs ${documentStatusClass(
-                          document.status
-                        )}`}
-                      >
-                        {document.status === "completed"
-                          ? "Indexed"
-                          : document.status}
-                      </span>
-
-                      <a
-                        href={document.source_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Open PDF"
-                        className="rounded-md p-2 text-slate-400 transition hover:bg-white/10 hover:text-white"
-                      >
-                        <ArrowUpRight size={16} />
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <form className="query-box" onSubmit={handleSubmit}>
-            <textarea
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Ask a question about a company, financial statement, or annual report..."
-              rows={3}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-            />
-
-            <div className="query-bottom">
-              <span>
-                <ShieldCheck size={14} />
-                Answers grounded in retrieved evidence
-              </span>
-
-              <button
-                type="submit"
-                disabled={loading || !question.trim()}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={16} className="spin" />
-                    Researching
-                  </>
-                ) : (
-                  <>
-                    Research <ArrowUpRight size={17} />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-
-          {!result && !loading && (
-            <div className="suggestions">
-              <span className="suggestion-label">TRY ASKING</span>
-
-              {suggestions.map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setQuestion(item)}
-                  className="suggestion"
-                >
-                  {item}
-                  <ArrowUpRight size={14} />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {loading && (
-            <div className="loading-panel">
-              <Loader2 size={25} className="spin" />
-
-              <div>
-                <strong>Analyzing financial evidence</strong>
+                <h2>
+                  Verification
+                  <span> workspace.</span>
+                </h2>
 
                 <p>
-                  Retrieving relevant passages, generating an answer and
-                  running verification checks.
+                  Review verification reports generated during your
+                  financial research sessions.
                 </p>
               </div>
-            </div>
-          )}
 
-          {error && (
-            <div className="error-panel">
-              <CircleAlert size={19} />
-
-              <div>
-                <strong>Unable to complete research</strong>
-                <p>{error}</p>
-
-                <small>
-                  Check that your FastAPI server is running and CORS is
-                  configured.
-                </small>
-              </div>
-            </div>
-          )}
-
-          {result && (
-            <div className="results">
-              <div className="result-heading">
-                <div>
-                  <span className="result-label">RESEARCH RESULT</span>
-                  <h3>{result.question}</h3>
-                </div>
-
-                <span className="result-count">
-                  {result.citations.length} sources
-                </span>
-              </div>
-
-              <section className="answer-card">
-                <div className="card-heading">
-                  <div className="card-title">
-                    <Sparkles size={17} />
-                    Generated answer
+              {/* Overview cards */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm text-slate-400">
+                      Reports generated
+                    </span>
+                    <History size={18} className="text-blue-400" />
                   </div>
 
-                  <span className="answer-badge">
-                    {result.abstained ? "Abstained" : "Response"}
-                  </span>
+                  <p className="text-3xl font-semibold text-white">
+                    {verificationHistory.length}
+                  </p>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    Current session
+                  </p>
                 </div>
 
-                <p className="answer-text">{result.answer}</p>
-
-                <div className="answer-meta">
-                  <span>
-                    <FileText size={14} />
-                    {result.citations.length} cited evidence items
-                  </span>
-                </div>
-              </section>
-
-              <section className="verification-card">
-                <div className="card-heading">
-                  <div className="card-title">
-                    <ShieldCheck size={17} />
-                    Verification report
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm text-slate-400">
+                      Accepted
+                    </span>
+                    <CheckCircle2
+                      size={18}
+                      className="text-emerald-400"
+                    />
                   </div>
 
-                  <span
-                    className={`decision decision-${result.verification.decision}`}
-                  >
-                    {result.verification.decision.toUpperCase()}
-                  </span>
+                  <p className="text-3xl font-semibold text-emerald-400">
+                    {acceptedReports}
+                  </p>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    Accepted verification decisions
+                  </p>
                 </div>
 
-                <p className="verification-note">
-                  Verification reflects the checks configured in the
-                  backend. A passing decision does not necessarily mean
-                  every claim has undergone semantic verification.
-                </p>
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm text-slate-400">
+                      Flagged / rejected
+                    </span>
+                    <CircleAlert
+                      size={18}
+                      className="text-amber-400"
+                    />
+                  </div>
 
-                <div className="checks">
-                  {result.verification.checks.map((check) => (
-                    <div className="check-row" key={check.name}>
-                      {statusIcon(check.status)}
+                  <p className="text-3xl font-semibold text-amber-400">
+                    {flaggedReports}
+                  </p>
 
-                      <div className="check-content">
-                        <strong>
-                          {check.name.replaceAll("_", " ")}
-                        </strong>
-
-                        <p>{check.message}</p>
-                      </div>
-
-                      <span className={`check-status ${check.status}`}>
-                        {check.status.replaceAll("_", " ")}
-                      </span>
-                    </div>
-                  ))}
+                  <p className="mt-2 text-xs text-slate-500">
+                    Decisions requiring attention
+                  </p>
                 </div>
-              </section>
+              </div>
 
-              <section className="evidence-section">
-                <div className="evidence-heading">
+              {/* Reports */}
+              <section>
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <span className="result-label">SOURCE MATERIAL</span>
-                    <h3>Retrieved evidence</h3>
+                    <span className="result-label">
+                      VERIFICATION HISTORY
+                    </span>
+                    <h3 className="mt-1 text-lg font-semibold text-white">
+                      Research reports
+                    </h3>
                   </div>
 
-                  <span className="result-count">
-                    {result.citations.length} citations
+                  <span className="text-xs text-slate-500">
+                    {verificationHistory.length} reports
                   </span>
                 </div>
 
-                {result.citations.map((citation) => (
-                  <article
-                    className="evidence-card"
-                    key={citation.evidence_id}
-                  >
-                    <div className="evidence-top">
-                      <span className="evidence-id">
-                        {citation.evidence_id}
-                      </span>
-
-                      <span className="page-label">
-                        PDF page {citation.page_number}
-                      </span>
+                {verificationHistory.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-14 text-center">
+                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+                      <FileCheck2 size={23} />
                     </div>
 
-                    <h4>{citation.company}</h4>
+                    <h3 className="text-base font-semibold text-white">
+                      No verification reports yet
+                    </h3>
 
-                    <div className="evidence-section-name">
-                      {citation.section || "Financial document"}
-                    </div>
-
-                    <p
-                      className={`evidence-text ${
-                        expandedCitation === citation.evidence_id
-                          ? "expanded"
-                          : ""
-                      }`}
-                    >
-                      {citation.text}
+                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-400">
+                      Run a financial research query to generate a
+                      verification report. Your reports will appear here
+                      during this session.
                     </p>
 
                     <button
-                      className="expand-button"
-                      onClick={() =>
-                        setExpandedCitation(
-                          expandedCitation === citation.evidence_id
-                            ? null
-                            : citation.evidence_id
-                        )
-                      }
+                      type="button"
+                      onClick={() => setActiveView("research")}
+                      className="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500"
                     >
-                      {expandedCitation === citation.evidence_id
-                        ? "Show less"
-                        : "Read full excerpt"}
-
-                      <ChevronDown
-                        size={15}
-                        className={
-                          expandedCitation === citation.evidence_id
-                            ? "rotate"
-                            : ""
-                        }
-                      />
+                      Start researching
+                      <ArrowUpRight size={16} />
                     </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {verificationHistory.map((report, index) => {
+                      const decision =
+                        report.verification.decision.toLowerCase();
 
-                    <div className="evidence-footer">
-                      <span>
-                        Chunk: {citation.chunk_id.slice(-12)}
-                      </span>
+                      return (
+                        <article
+                          key={`${report.question}-${index}`}
+                          className="rounded-xl border border-white/10 bg-white/[0.02] p-5 transition hover:border-white/20"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div className="flex min-w-0 gap-3">
+                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                                <FileCheck2 size={19} />
+                              </div>
 
-                      <a
-                        href={citation.source_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Open original report
-                        <ArrowUpRight size={14} />
-                      </a>
-                    </div>
-                  </article>
-                ))}
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-semibold tracking-wider text-slate-500">
+                                  REPORT {verificationHistory.length - index}
+                                </span>
+
+                                <h4 className="mt-1 text-sm font-medium leading-6 text-white">
+                                  {report.question}
+                                </h4>
+
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {report.citations.length} evidence
+                                  citations ·{" "}
+                                  {report.verification.checks.length}{" "}
+                                  verification checks
+                                </p>
+                              </div>
+                            </div>
+
+                            <span
+                              className={`decision decision-${decision}`}
+                            >
+                              {decision.toUpperCase()}
+                            </span>
+                          </div>
+
+                          <div className="mt-5 border-t border-white/5 pt-4">
+                            <div className="mb-3 flex items-center justify-between">
+                              <span className="text-xs font-semibold tracking-wide text-slate-400">
+                                VERIFICATION CHECKS
+                              </span>
+
+                              <span
+                                className={`text-xs ${
+                                  report.verification.passed
+                                    ? "text-emerald-400"
+                                    : "text-amber-400"
+                                }`}
+                              >
+                                {report.verification.passed
+                                  ? "Checks passed"
+                                  : "Review required"}
+                              </span>
+                            </div>
+
+                            <div className="space-y-3">
+                              {report.verification.checks.map((check) => (
+                                <div
+                                  key={check.name}
+                                  className="flex items-start gap-3"
+                                >
+                                  <div className="mt-0.5">
+                                    {statusIcon(check.status)}
+                                  </div>
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <strong className="text-xs font-medium capitalize text-slate-200">
+                                        {check.name.replaceAll("_", " ")}
+                                      </strong>
+
+                                      <span
+                                        className={`check-status ${check.status}`}
+                                      >
+                                        {check.status.replaceAll("_", " ")}
+                                      </span>
+                                    </div>
+
+                                    <p className="mt-1 text-xs leading-5 text-slate-400">
+                                      {check.message}
+                                    </p>
+
+                                    {check.details.length > 0 && (
+                                      <ul className="mt-2 space-y-1">
+                                        {check.details.map(
+                                          (detail, detailIndex) => (
+                                            <li
+                                              key={detailIndex}
+                                              className="text-xs leading-5 text-slate-500"
+                                            >
+                                              · {detail}
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-4">
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                              <BookOpen size={14} />
+                              {report.citations.length} cited evidence
+                              items
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => openResearchReport(report)}
+                              className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-400"
+                            >
+                              View original research
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
+
+              <div className="rounded-xl border border-blue-500/10 bg-blue-500/[0.04] p-4">
+                <div className="flex items-start gap-3">
+                  <Activity
+                    size={17}
+                    className="mt-0.5 shrink-0 text-blue-400"
+                  />
+
+                  <p className="text-xs leading-5 text-slate-400">
+                    Reports shown here are held in frontend session state.
+                    They will reset when the page is refreshed. Persistent
+                    verification history can be added later using the
+                    backend database.
+                  </p>
+                </div>
+              </div>
             </div>
+          ) : (
+            /* RESEARCH WORKSPACE */
+            <>
+              <div className="heading">
+                <div className="eyebrow">
+                  <Sparkles size={14} />
+                  EVIDENCE-FIRST FINANCIAL RESEARCH
+                </div>
+
+                <h2>
+                  Research with
+                  <span> confidence.</span>
+                </h2>
+
+                <p>
+                  Ask questions about financial filings. Get grounded
+                  answers with traceable evidence and transparent
+                  verification.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setUploadOpen(true)}
+                  className="mt-5 inline-flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-400 transition hover:bg-blue-500/20"
+                >
+                  <Upload size={16} />
+                  Upload financial report
+                </button>
+              </div>
+
+              {/* Recently uploaded documents */}
+              {uploadedDocuments.length > 0 && (
+                <section className="mb-7 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Database size={17} className="text-blue-400" />
+                      <h3 className="text-sm font-semibold">
+                        Recently uploaded
+                      </h3>
+                    </div>
+
+                    <span className="text-xs text-slate-500">
+                      {uploadedDocuments.length} documents
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {uploadedDocuments.map((document) => (
+                      <div
+                        key={document.document_id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-3"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <FileText
+                            size={19}
+                            className="shrink-0 text-blue-400"
+                          />
+
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {document.company}
+                            </p>
+
+                            <p className="truncate text-xs text-slate-500">
+                              {document.filename}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          <span className="text-xs text-slate-400">
+                            {document.chunks_indexed} chunks
+                          </span>
+
+                          <span className="flex items-center gap-1 text-xs text-emerald-400">
+                            <CheckCircle2 size={13} />
+                            Indexed
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <form className="query-box" onSubmit={handleSubmit}>
+                <textarea
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  placeholder="Ask a question about a company, financial statement, or annual report..."
+                  rows={3}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                />
+
+                <div className="query-bottom">
+                  <span>
+                    <ShieldCheck size={14} />
+                    Answers grounded in retrieved evidence
+                  </span>
+
+                  <button
+                    type="submit"
+                    disabled={loading || !question.trim()}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 size={16} className="spin" />
+                        Researching
+                      </>
+                    ) : (
+                      <>
+                        Research <ArrowUpRight size={17} />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {!result && !loading && (
+                <div className="suggestions">
+                  <span className="suggestion-label">TRY ASKING</span>
+
+                  {suggestions.map((item) => (
+                    <button
+                      key={item}
+                      onClick={() => setQuestion(item)}
+                      className="suggestion"
+                    >
+                      {item}
+                      <ArrowUpRight size={14} />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {loading && (
+                <div className="loading-panel">
+                  <Loader2 size={25} className="spin" />
+
+                  <div>
+                    <strong>Analyzing financial evidence</strong>
+
+                    <p>
+                      Retrieving relevant passages, generating an answer
+                      and running verification checks.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="error-panel">
+                  <CircleAlert size={19} />
+
+                  <div>
+                    <strong>Unable to complete research</strong>
+                    <p>{error}</p>
+
+                    <small>
+                      Check that your FastAPI server is running and CORS
+                      is configured.
+                    </small>
+                  </div>
+                </div>
+              )}
+
+              {result && (
+                <div className="results">
+                  <div className="result-heading">
+                    <div>
+                      <span className="result-label">RESEARCH RESULT</span>
+                      <h3>{result.question}</h3>
+                    </div>
+
+                    <span className="result-count">
+                      {result.citations.length} sources
+                    </span>
+                  </div>
+
+                  <section className="answer-card">
+                    <div className="card-heading">
+                      <div className="card-title">
+                        <Sparkles size={17} />
+                        Generated answer
+                      </div>
+
+                      <span className="answer-badge">
+                        {result.abstained ? "Abstained" : "Response"}
+                      </span>
+                    </div>
+
+                    <p className="answer-text">{result.answer}</p>
+
+                    <div className="answer-meta">
+                      <span>
+                        <FileText size={14} />
+                        {result.citations.length} cited evidence items
+                      </span>
+                    </div>
+                  </section>
+
+                  <section className="verification-card">
+                    <div className="card-heading">
+                      <div className="card-title">
+                        <ShieldCheck size={17} />
+                        Verification report
+                      </div>
+
+                      <span
+                        className={`decision decision-${result.verification.decision}`}
+                      >
+                        {result.verification.decision.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <p className="verification-note">
+                      Verification reflects the checks configured in the
+                      backend. Review the individual check results below
+                      for details.
+                    </p>
+
+                    <div className="checks">
+                      {result.verification.checks.map((check) => (
+                        <div className="check-row" key={check.name}>
+                          {statusIcon(check.status)}
+
+                          <div className="check-content">
+                            <strong>
+                              {check.name.replaceAll("_", " ")}
+                            </strong>
+
+                            <p>{check.message}</p>
+                          </div>
+
+                          <span className={`check-status ${check.status}`}>
+                            {check.status.replaceAll("_", " ")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="evidence-section">
+                    <div className="evidence-heading">
+                      <div>
+                        <span className="result-label">SOURCE MATERIAL</span>
+                        <h3>Retrieved evidence</h3>
+                      </div>
+
+                      <span className="result-count">
+                        {result.citations.length} citations
+                      </span>
+                    </div>
+
+                    {result.citations.map((citation) => (
+                      <article
+                        className="evidence-card"
+                        key={citation.evidence_id}
+                      >
+                        <div className="evidence-top">
+                          <span className="evidence-id">
+                            {citation.evidence_id}
+                          </span>
+
+                          <span className="page-label">
+                            PDF page {citation.page_number}
+                          </span>
+                        </div>
+
+                        <h4>{citation.company}</h4>
+
+                        <div className="evidence-section-name">
+                          {citation.section || "Financial document"}
+                        </div>
+
+                        <p
+                          className={`evidence-text ${
+                            expandedCitation === citation.evidence_id
+                              ? "expanded"
+                              : ""
+                          }`}
+                        >
+                          {citation.text}
+                        </p>
+
+                        <button
+                          type="button"
+                          className="expand-button"
+                          onClick={() =>
+                            setExpandedCitation(
+                              expandedCitation === citation.evidence_id
+                                ? null
+                                : citation.evidence_id
+                            )
+                          }
+                        >
+                          {expandedCitation === citation.evidence_id
+                            ? "Show less"
+                            : "Read full excerpt"}
+
+                          <ChevronDown
+                            size={15}
+                            className={
+                              expandedCitation === citation.evidence_id
+                                ? "rotate"
+                                : ""
+                            }
+                          />
+                        </button>
+
+                        <div className="evidence-footer">
+                          <span>
+                            Chunk: {citation.chunk_id.slice(-12)}
+                          </span>
+
+                          <a
+                            href={citation.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Open original report
+                            <ArrowUpRight size={14} />
+                          </a>
+                        </div>
+                      </article>
+                    ))}
+                  </section>
+                </div>
+              )}
+            </>
           )}
 
           <footer className="page-footer">

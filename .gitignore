@@ -48,3 +48,5 @@ data/processed/*
 .env
 .env.*
 !.env.example
+
+data/uploads/

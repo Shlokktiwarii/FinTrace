@@ -1,33 +1,37 @@
+import logging
 from datetime import UTC, datetime
-from pathlib import Path
-from uuid import uuid4, UUID
+from uuid import UUID, uuid4
 
 from fastapi import (
     APIRouter,
+    Depends,
     File,
     Form,
     HTTPException,
     Request,
     UploadFile,
-    Depends,
 )
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fintrace.api.dependencies import load_all_chunks
-from fintrace.database.session import get_db
+from fintrace.core.config import get_settings
 from fintrace.database.models import Document
+from fintrace.database.session import get_db
 from fintrace.ingestion.models import (
     DocumentSource,
     DocumentType,
     RawDocument,
 )
+from fintrace.storage.supabase_storage import SupabaseStorage
+
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
-UPLOAD_DIR = Path("data/uploads")
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
 
@@ -54,7 +58,10 @@ async def upload_document(
     content = await file.read()
 
     if not content:
-        raise HTTPException(status_code=400, detail="Empty PDF.")
+        raise HTTPException(
+            status_code=400,
+            detail="Empty PDF.",
+        )
 
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -80,18 +87,43 @@ async def upload_document(
     # 4. Generate document ID.
     document_id = uuid4()
 
-    # 5. Save original PDF locally.
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    # 5. Initialize Supabase Storage.
+    settings = get_settings()
+    storage = SupabaseStorage()
 
-    file_path = UPLOAD_DIR / f"{document_id}.pdf"
-    file_path.write_bytes(content)
+    storage_bucket = settings.supabase_storage_bucket
+    storage_path = f"documents/{document_id}.pdf"
+
+    # 6. Upload PDF to Supabase Storage.
+    try:
+        await run_in_threadpool(
+            storage.upload,
+            storage_path,
+            content,
+        )
+
+        logger.info(
+            "PDF uploaded to Supabase Storage: %s",
+            storage_path,
+        )
+
+    except Exception:
+        logger.exception(
+            "Supabase Storage upload failed for document %s",
+            document_id,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to upload PDF to document storage. Check backend logs.",
+        ) from None
 
     source_url = (
         f"{str(request.base_url).rstrip('/')}"
         f"/api/v1/documents/{document_id}/file"
     )
 
-    # 6. Create initial database record.
+    # 7. Create database record.
     document = Document(
         id=document_id,
         company=company,
@@ -101,18 +133,44 @@ async def upload_document(
         document_type=doc_type.value,
         source=DocumentSource.COMPANY.value,
         source_url=source_url,
-        storage_bucket="local",
-        storage_path=str(file_path),
+        storage_bucket=storage_bucket,
+        storage_path=storage_path,
         file_size=len(content),
         status="pending",
         chunks_indexed=0,
     )
 
-    db.add(document)
-    db.commit()
-    db.refresh(document)
+    try:
+        db.add(document)
+        db.commit()
+        db.refresh(document)
 
-    # 7. Construct RawDocument.
+    except Exception:
+        db.rollback()
+
+        logger.exception(
+            "Failed to save document metadata for %s",
+            document_id,
+        )
+
+        # Remove uploaded PDF to avoid orphaned storage.
+        try:
+            await run_in_threadpool(
+                storage.delete,
+                storage_path,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to clean up uploaded PDF: %s",
+                storage_path,
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to save document metadata.",
+        ) from None
+
+    # 8. Construct RawDocument.
     raw_document = RawDocument(
         document_id=str(document_id),
         company=company,
@@ -126,7 +184,7 @@ async def upload_document(
     )
 
     try:
-        # 8. Run existing ingestion pipeline.
+        # 9. Run existing ingestion pipeline.
         chunks_indexed = await run_in_threadpool(
             services["indexing_pipeline"].index_document,
             raw_document,
@@ -138,7 +196,7 @@ async def upload_document(
                 detail="No extractable text found in the PDF.",
             )
 
-        # 9. Refresh BM25.
+        # 10. Refresh BM25 index.
         updated_chunks = await run_in_threadpool(
             load_all_chunks,
             services["vector_store"],
@@ -147,7 +205,7 @@ async def upload_document(
         services["sparse_retriever"].index(updated_chunks)
         services["chunks"] = updated_chunks
 
-        # 10. Update database record.
+        # 11. Update database record.
         document.status = "completed"
         document.chunks_indexed = chunks_indexed
         document.updated_at = datetime.now(UTC)
@@ -155,15 +213,25 @@ async def upload_document(
         db.commit()
         db.refresh(document)
 
-    except Exception as exc:
+        logger.info(
+            "Document ingestion completed: %s (%s chunks)",
+            document_id,
+            chunks_indexed,
+        )
+
+    except Exception:
         db.rollback()
 
-        # Mark document as failed.
+        logger.exception(
+            "Document ingestion failed: %s",
+            document_id,
+        )
+
         failed_document = db.get(Document, document_id)
 
         if failed_document:
             failed_document.status = "failed"
-            failed_document.error_message = str(exc)
+            failed_document.error_message = "Document ingestion failed. Check backend logs."
             failed_document.updated_at = datetime.now(UTC)
             db.commit()
 
@@ -209,25 +277,55 @@ def list_documents(
 
 
 @router.get("/{document_id}/file")
-async def get_document_file(document_id: str):
+async def get_document_file(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    # 1. Validate document ID.
     try:
-        document_id = str(UUID(document_id))
+        parsed_id = UUID(document_id)
     except ValueError:
         raise HTTPException(
             status_code=400,
             detail="Invalid document ID.",
         ) from None
 
-    file_path = UPLOAD_DIR / f"{document_id}.pdf"
+    # 2. Retrieve document metadata.
+    document = db.get(Document, parsed_id)
 
-    if not file_path.exists():
+    if not document:
         raise HTTPException(
             status_code=404,
             detail="Document not found.",
         )
 
-    return FileResponse(
-        path=file_path,
+    # 3. Download PDF from Supabase Storage.
+    storage = SupabaseStorage()
+
+    try:
+        content = await run_in_threadpool(
+            storage.download,
+            document.storage_path,
+        )
+
+    except Exception:
+        logger.exception(
+            "Failed to retrieve PDF from Supabase Storage: %s",
+            document.storage_path,
+        )
+
+        raise HTTPException(
+            status_code=404,
+            detail="Stored PDF could not be retrieved.",
+        ) from None
+
+    # 4. Return PDF.
+    return Response(
+        content=content,
         media_type="application/pdf",
-        filename=f"{document_id}.pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{document.filename}"'
+            )
+        },
     )
