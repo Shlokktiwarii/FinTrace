@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     source_request_timeout: int = 30
     source_max_retries: int = 3
 
+    # Supabase
+    supabase_url: str | None = None
+    supabase_service_role_key: str | None = None
+
+    # PostgreSQL
+    database_url: str | None = None
+    
     # Embeddings
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimension: int = 384

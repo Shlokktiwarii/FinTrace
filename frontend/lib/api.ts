@@ -108,3 +108,31 @@ export async function uploadDocument(
 
   return JSON.parse(responseText) as DocumentUploadResponse;
 }
+
+export interface StoredDocument {
+  document_id: string;
+  filename: string;
+  company: string;
+  ticker: string | null;
+  document_type: string;
+  status: string;
+  chunks_indexed: number;
+  file_size: number;
+  created_at: string;
+  source_url: string;
+}
+
+export async function getDocuments(): Promise<StoredDocument[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/documents/`,
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch documents.");
+  }
+
+  return response.json();
+}

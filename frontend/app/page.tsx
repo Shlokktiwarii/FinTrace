@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -24,8 +24,10 @@ import {
 import {
   askFinTrace,
   uploadDocument,
+  getDocuments,
   QueryResponse,
   DocumentUploadResponse,
+  StoredDocument,
 } from "@/lib/api";
 
 const suggestions = [
@@ -58,9 +60,48 @@ export default function Home() {
   const [uploadResult, setUploadResult] =
     useState<DocumentUploadResponse | null>(null);
 
+  // Persistent document history
   const [uploadedDocuments, setUploadedDocuments] = useState<
-    DocumentUploadResponse[]
+    StoredDocument[]
   >([]);
+
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const [documentsError, setDocumentsError] = useState("");
+
+  // Fetch document history when workspace loads
+  useEffect(() => {
+    async function fetchDocuments() {
+      try {
+        const documents = await getDocuments();
+        setUploadedDocuments(documents);
+        setDocumentsError("");
+      } catch (err) {
+        setDocumentsError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load documents."
+        );
+      } finally {
+        setDocumentsLoading(false);
+      }
+    }
+
+    fetchDocuments();
+  }, []);
+
+  async function refreshDocuments() {
+    try {
+      const documents = await getDocuments();
+      setUploadedDocuments(documents);
+      setDocumentsError("");
+    } catch (err) {
+      setDocumentsError(
+        err instanceof Error
+          ? err.message
+          : "Unable to refresh documents."
+      );
+    }
+  }
 
   async function handleSubmit(
     event: React.FormEvent<HTMLFormElement>
@@ -107,10 +148,8 @@ export default function Home() {
 
       setUploadResult(response);
 
-      setUploadedDocuments((previous) => [
-        response,
-        ...previous,
-      ]);
+      // Refresh persistent document history from PostgreSQL
+      await refreshDocuments();
 
       setFile(null);
       setCompany("");
@@ -148,6 +187,17 @@ export default function Home() {
 
       default:
         return <Activity size={16} className="status-muted" />;
+    }
+  }
+
+  function documentStatusClass(status: string) {
+    switch (status) {
+      case "completed":
+        return "text-emerald-400";
+      case "failed":
+        return "text-red-400";
+      default:
+        return "text-amber-400";
     }
   }
 
@@ -260,22 +310,45 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Recently uploaded documents */}
-          {uploadedDocuments.length > 0 && (
-            <section className="mb-7 rounded-xl border border-white/10 bg-white/[0.02] p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Database size={17} className="text-blue-400" />
-                  <h3 className="text-sm font-semibold">
-                    Recently uploaded
-                  </h3>
-                </div>
-
-                <span className="text-xs text-slate-500">
-                  {uploadedDocuments.length} documents
-                </span>
+          {/* Persistent document history */}
+          <section className="mb-7 rounded-xl border border-white/10 bg-white/[0.02] p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database size={17} className="text-blue-400" />
+                <h3 className="text-sm font-semibold">
+                  Recently uploaded
+                </h3>
               </div>
 
+              <span className="text-xs text-slate-500">
+                {uploadedDocuments.length} documents
+              </span>
+            </div>
+
+            {documentsLoading ? (
+              <div className="flex items-center gap-2 py-5 text-sm text-slate-400">
+                <Loader2 size={16} className="animate-spin" />
+                Loading document history...
+              </div>
+            ) : documentsError ? (
+              <div className="flex items-center gap-2 py-4 text-sm text-red-400">
+                <CircleAlert size={16} />
+                {documentsError}
+              </div>
+            ) : uploadedDocuments.length === 0 ? (
+              <div className="py-6 text-center">
+                <FileText
+                  className="mx-auto mb-2 text-slate-500"
+                  size={25}
+                />
+                <p className="text-sm text-slate-400">
+                  No documents uploaded yet.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Upload a financial report to get started.
+                </p>
+              </div>
+            ) : (
               <div className="space-y-3">
                 {uploadedDocuments.map((document) => (
                   <div
@@ -289,12 +362,18 @@ export default function Home() {
                       />
 
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
+                        <p className="truncate text-sm font-medium text-white">
                           {document.company}
                         </p>
 
                         <p className="truncate text-xs text-slate-500">
                           {document.filename}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-600">
+                          {new Date(
+                            document.created_at
+                          ).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
@@ -304,16 +383,31 @@ export default function Home() {
                         {document.chunks_indexed} chunks
                       </span>
 
-                      <span className="flex items-center gap-1 text-xs text-emerald-400">
-                        <CheckCircle2 size={13} />
-                        Indexed
+                      <span
+                        className={`text-xs ${documentStatusClass(
+                          document.status
+                        )}`}
+                      >
+                        {document.status === "completed"
+                          ? "Indexed"
+                          : document.status}
                       </span>
+
+                      <a
+                        href={document.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open PDF"
+                        className="rounded-md p-2 text-slate-400 transition hover:bg-white/10 hover:text-white"
+                      >
+                        <ArrowUpRight size={16} />
+                      </a>
                     </div>
                   </div>
                 ))}
               </div>
-            </section>
-          )}
+            )}
+          </section>
 
           <form className="query-box" onSubmit={handleSubmit}>
             <textarea

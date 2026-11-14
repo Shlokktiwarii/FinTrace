@@ -44,3 +44,7 @@ data/processed/*
 
 # Logs
 *.log
+
+.env
+.env.*
+!.env.example
